@@ -2,8 +2,48 @@ const Product = require('../models/product.model.js');
 
 const getProducts = async (req, res) => {
     try {
-        const products = await Product.find();
-        res.status(200).json(products);
+
+        let  {priceRange, search, sortOrder, sortBy, limit, page } = req.query;
+
+        page = parseInt(page) || 1;
+        limit = parseInt(limit) || 10;
+        const skip = (page - 1) * limit;
+
+        let query = {};
+
+        if (search) {
+            query.name = {$regex: search, $options: "i"};
+        }
+
+        //Price Range Like 100-50
+        if (priceRange) {
+            const [min, max] = priceRange.split("-").map(Number);
+            query.price = {};
+            if (!isNaN(min)) query.price.$gte = min;
+            if (!isNaN(max)) query.price.$lte = max;
+        }
+
+        //sorting
+        let sortOptions = {};
+        if (sortBy) {
+            sortOptions[sortBy] = sortOrder === "desc" ? -1 : 1;
+        } else {
+            sortOptions = {createdAt: -1}
+        }
+
+        const products = await Product.find(query)
+            .sort(sortOptions)
+            .skip(skip)
+            .limit(limit);
+
+        const total = await Product.countDocuments(query);
+        res.status(200).json({
+            total,
+            page,
+            totalPages: Math.ceil(total / limit),
+            limit,
+            products
+        });
     } catch (e) {
         res.status(500).json({message: e.message});
     }
